@@ -76,3 +76,20 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+.ground {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.category {
+  margin-bottom: 20px;
+}
+
+.task-block {
+  background-color: #f0f0f0;
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+}
