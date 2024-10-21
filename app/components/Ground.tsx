@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Timeline } from './Timeline';
 import { Project } from '../models/Project';
 import { Task } from '../models/Task';
 import { DocumentTabs } from './DocumentTabs';
+import { Layout } from './Layout';
 import dynamic from 'next/dynamic';
 
 const KonvaCanvas = dynamic(() => import('./KonvaCanvas'), { ssr: false });
@@ -25,13 +25,12 @@ interface Tab {
 
 export const Ground: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([
-    new Task('1', 'Task 1', 'Inbox', '', 0, 0),
-    new Task('2', 'Task 2', 'Today', '', 160, 0),
-    new Task('3', 'Task 3', 'Upcoming', '', 320, 0),
-    new Task('4', 'Task 4', 'Menial', '', 480, 0),
+    new Task('1', 'Task 1', 'Inbox', '', 10, 10),
+    new Task('2', 'Task 2', 'Inbox', '', 10, 100),
+    new Task('3', 'Task 3', 'Inbox', '', 10, 190),
+    new Task('4', 'Task 4', 'Inbox', '', 10, 280),
   ]);
 
-  const [timelineTasks, setTimelineTasks] = useState<Task[]>([]);
   const [projects] = useState<Project[]>([
     new Project('1', 'Project 1'),
     new Project('2', 'Project 2'),
@@ -94,10 +93,12 @@ export const Ground: React.FC = () => {
     console.log('Task drag started:', taskId);
   };
 
-  const handleTaskDragEnd = (taskId: string, x: number, y: number) => {
+  const handleTaskDragEnd = (taskId: string, x: number, y: number, category: TaskCategory) => {
     setTasks(prevTasks =>
       prevTasks.map(task =>
-        task.id === taskId ? { ...task, x, y } : task
+        task.id === taskId
+          ? new Task(task.id, task.title, category, task.content, x, y)
+          : task
       )
     );
   };
@@ -106,44 +107,71 @@ export const Ground: React.FC = () => {
     switch (tab.content.type) {
       case 'ground':
         return (
-          <KonvaCanvas 
-            tasks={tasks} 
-            openProjectOrTask={openProjectOrTask}
-            onTaskDragStart={handleTaskDragStart}
-            onTaskDragEnd={handleTaskDragEnd}
-          />
+          <div className="h-full w-full overflow-hidden">
+            <KonvaCanvas 
+              tasks={tasks} 
+              openProjectOrTask={openProjectOrTask}
+              onTaskDragStart={handleTaskDragStart}
+              onTaskDragEnd={handleTaskDragEnd}
+            />
+          </div>
         );
       case 'markdown':
-        return <div className="p-4">{tab.content.content}</div>;
+        return <div className="p-4 h-full overflow-auto">{tab.content.content}</div>;
       case 'project':
-        return <div className="p-4">Project: {tab.content.project.name}</div>;
+        return <div className="p-4 h-full overflow-auto">Project: {tab.content.project.name}</div>;
       case 'task':
-        return <div className="p-4">Task: {tab.content.task.title}</div>;
+        return <div className="p-4 h-full overflow-auto">Task: {tab.content.task.title}</div>;
     }
   };
 
-  return (
-    <div className="flex h-screen w-screen">
-      <Timeline 
-        tasks={timelineTasks} 
-        updateTaskTime={() => {}} 
+  const updateTaskTime = (taskId: string, time: number) => {
+    setTasks(prevTasks =>
+      prevTasks.map(task =>
+        task.id === taskId ? { ...task, recordedTime: time } : task
+      )
+    );
+  };
+
+  const leftSidebar = (
+    <div className="flex flex-col h-full">
+      <div className="p-4 font-bold text-xl border-b border-gray-700">Ground</div>
+      <div className="flex-grow overflow-auto p-2">
+        <h2 className="text-lg font-semibold mb-2">Today&apos;s Tasks</h2>
+        <div className="space-y-2">
+          {tasks.filter(task => task.category === 'Today').map(task => (
+            <div key={task.id} className="bg-gray-700 p-2 rounded">
+              {task.title}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const mainContent = (
+    <div className="flex flex-col h-full">
+      <DocumentTabs
+        documents={tabs}
+        activeDocumentId={activeTabId}
+        onSelectDocument={handleSelectTab}
+        onCloseDocument={handleCloseTab}
+        onUpdateDocument={handleUpdateTab}
       />
-      <div className="flex flex-col w-4/6">
-        <DocumentTabs
-          documents={tabs}
-          activeDocumentId={activeTabId}
-          onSelectDocument={handleSelectTab}
-          onCloseDocument={handleCloseTab}
-          onUpdateDocument={handleUpdateTab}
-        />
+      <div className="flex-grow overflow-hidden">
         {renderTabContent(tabs.find(tab => tab.id === activeTabId)!)}
       </div>
-      <div className="projects w-1/6 bg-gray-100 p-4 overflow-auto">
-        <h2 className="text-2xl font-bold mb-4">Projects</h2>
+    </div>
+  );
+
+  const rightSidebar = (
+    <div className="flex flex-col h-full">
+      <div className="p-4 font-bold text-xl border-b border-gray-300">Projects</div>
+      <div className="flex-grow overflow-auto p-2">
         {projects.map(project => (
           <div 
             key={project.id} 
-            className="cursor-pointer mb-2"
+            className="cursor-pointer py-2 px-3 hover:bg-gray-300 rounded mb-1"
             onClick={() => openProjectOrTask(project)}
           >
             {project.name}
@@ -151,5 +179,13 @@ export const Ground: React.FC = () => {
         ))}
       </div>
     </div>
+  );
+
+  return (
+    <Layout
+      leftSidebar={leftSidebar}
+      mainContent={mainContent}
+      rightSidebar={rightSidebar}
+    />
   );
 };
