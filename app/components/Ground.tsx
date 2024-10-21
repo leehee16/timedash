@@ -1,14 +1,27 @@
 "use client";
 
 import React, { useState } from 'react';
-import { DndContext, DragEndEvent, DragOverlay, useSensors, useSensor, PointerSensor, useDroppable } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { TaskBlock } from './TaskBlock';
 import { Timeline } from './Timeline';
 import { Project } from '../models/Project';
 import { Task } from '../models/Task';
+import { DocumentTabs } from './DocumentTabs';
+import dynamic from 'next/dynamic';
+
+const KonvaCanvas = dynamic(() => import('./KonvaCanvas'), { ssr: false });
 
 export type TaskCategory = 'Inbox' | 'Today' | 'Upcoming' | 'Menial' | 'Planned' | 'Recorded';
+
+type TabContent = 
+  | { type: 'ground' }
+  | { type: 'markdown'; content: string }
+  | { type: 'project'; project: Project }
+  | { type: 'task'; task: Task };
+
+interface Tab {
+  id: string;
+  title: string;
+  content: TabContent;
+}
 
 export const Ground: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([
@@ -19,98 +32,111 @@ export const Ground: React.FC = () => {
   ]);
 
   const [timelineTasks, setTimelineTasks] = useState<Task[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [projects, setProjects] = useState<Project[]>([
+  const [projects] = useState<Project[]>([
     new Project('1', 'Project 1'),
     new Project('2', 'Project 2'),
   ]);
 
-  const sensors = useSensors(useSensor(PointerSensor));
+  const [tabs, setTabs] = useState<Tab[]>([
+    { id: 'ground', title: 'Ground', content: { type: 'ground' } },
+    { id: 'home', title: 'Home', content: { type: 'markdown', content: '# Welcome to Ground\n\nThis is your home page.' } },
+  ]);
+  const [activeTabId, setActiveTabId] = useState('ground');
 
-  const categories: TaskCategory[] = ['Inbox', 'Today', 'Upcoming', 'Menial'];
+  const handleSelectTab = (id: string) => {
+    setActiveTabId(id);
+  };
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-
-    if (!over) return;
-
-    if (over.id === 'timeline') {
-      const taskToMove = tasks.find(task => task.id === active.id);
-      if (taskToMove) {
-        setTasks(tasks.filter(task => task.id !== active.id));
-        setTimelineTasks([...timelineTasks, { ...taskToMove, category: 'Planned' }]);
-      }
-    } else if (typeof over.id === 'string' && categories.includes(over.id as TaskCategory)) {
-      const taskToMove = tasks.find(task => task.id === active.id) || timelineTasks.find(task => task.id === active.id);
-      if (taskToMove) {
-        if (taskToMove.category === 'Planned') {
-          setTimelineTasks(timelineTasks.filter(task => task.id !== active.id));
-        } else {
-          setTasks(tasks.filter(task => task.id !== active.id));
-        }
-        setTasks([...tasks, { ...taskToMove, category: over.id as TaskCategory }]);
-      }
+  const handleCloseTab = (id: string) => {
+    if (id === 'ground' || id === 'home') return; // Prevent closing Ground and Home tabs
+    setTabs(prevTabs => prevTabs.filter(tab => tab.id !== id));
+    if (activeTabId === id) {
+      setActiveTabId('ground');
     }
-
-    setActiveId(null);
   };
 
-  const handleDragStart = (event: DragEndEvent) => {
-    setActiveId(event.active.id as string);
-  };
-
-  const CategoryDroppable = ({ category }: { category: TaskCategory }) => {
-    const { setNodeRef } = useDroppable({ id: category });
-    return (
-      <div ref={setNodeRef} className="bg-gray-100 p-2 rounded min-h-[100px]">
-        <h3 className="text-xl font-semibold mb-2">{category}</h3>
-        <SortableContext items={tasks.filter(task => task.category === category).map(task => task.id)} strategy={verticalListSortingStrategy}>
-          {tasks.filter(task => task.category === category).map((task) => (
-            <TaskBlock key={task.id} task={task} />
-          ))}
-        </SortableContext>
-      </div>
+  const handleUpdateTab = (id: string, content: string) => {
+    setTabs(prevTabs =>
+      prevTabs.map(tab =>
+        tab.id === id && tab.content.type === 'markdown' 
+          ? { ...tab, content: { ...tab.content, content } } 
+          : tab
+      )
     );
   };
 
-  const ProjectTree = ({ project, depth = 0 }: { project: Project; depth?: number }) => (
-    <div style={{ marginLeft: `${depth * 20}px` }}>
-      <div className="flex items-center">
-        <span className="mr-2">📁</span>
-        <span>{project.name}</span>
-      </div>
-      {project.subProjects.map(subProject => (
-        <ProjectTree key={subProject.id} project={subProject} depth={depth + 1} />
-      ))}
-    </div>
-  );
+  const openProjectOrTask = (item: Project | Task) => {
+    const existingTab = tabs.find(tab => tab.id === item.id);
+    if (existingTab) {
+      setActiveTabId(item.id);
+    } else {
+      const newTab: Tab = {
+        id: item.id,
+        title: item instanceof Project ? item.name : item.title,
+        content: item instanceof Project 
+          ? { type: 'project', project: item }
+          : { type: 'task', task: item },
+      };
+      setTabs(prevTabs => [...prevTabs, newTab]);
+      setActiveTabId(item.id);
+    }
+  };
+
+  const moveTaskToTimeline = (taskId: string) => {
+    const taskToMove = tasks.find(task => task.id === taskId);
+    if (taskToMove) {
+      setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
+      setTimelineTasks(prevTasks => [...prevTasks, new Task(taskToMove.id, taskToMove.title, 'Planned', taskToMove.content)]);
+    }
+  };
+
+  const renderTabContent = (tab: Tab) => {
+    switch (tab.content.type) {
+      case 'ground':
+        return (
+          <KonvaCanvas 
+            tasks={tasks} 
+            openProjectOrTask={openProjectOrTask}
+            onTaskDragStart={(taskId) => console.log('Task drag started:', taskId)}
+          />
+        );
+      case 'markdown':
+        return <div className="p-4">{tab.content.content}</div>;
+      case 'project':
+        return <div className="p-4">Project: {tab.content.project.name}</div>;
+      case 'task':
+        return <div className="p-4">Task: {tab.content.task.title}</div>;
+    }
+  };
 
   return (
-    <DndContext sensors={sensors} onDragEnd={handleDragEnd} onDragStart={handleDragStart}>
-      <div className="flex h-screen">
-        <Timeline tasks={timelineTasks} />
-        <div className="ground w-1/2 p-4 overflow-auto">
-          <h2 className="text-2xl font-bold mb-4">Ground</h2>
-          <div className="grid grid-cols-2 gap-4">
-            {categories.map((category) => (
-              <CategoryDroppable key={category} category={category} />
-            ))}
-          </div>
-        </div>
-        <div className="projects w-1/4 bg-gray-100 p-4 overflow-auto">
-          <h2 className="text-2xl font-bold mb-4">Projects</h2>
-          {projects.map(project => (
-            <ProjectTree key={project.id} project={project} />
-          ))}
-        </div>
+    <div className="flex h-screen w-screen">
+      <Timeline 
+        tasks={timelineTasks} 
+        updateTaskTime={() => {}} 
+      />
+      <div className="flex flex-col w-4/6">
+        <DocumentTabs
+          documents={tabs}
+          activeDocumentId={activeTabId}
+          onSelectDocument={handleSelectTab}
+          onCloseDocument={handleCloseTab}
+          onUpdateDocument={handleUpdateTab}
+        />
+        {renderTabContent(tabs.find(tab => tab.id === activeTabId)!)}
       </div>
-      <DragOverlay>
-        {activeId ? (
-          <TaskBlock 
-            task={tasks.find(task => task.id === activeId) || timelineTasks.find(task => task.id === activeId)!} 
-          />
-        ) : null}
-      </DragOverlay>
-    </DndContext>
+      <div className="projects w-1/6 bg-gray-100 p-4 overflow-auto">
+        <h2 className="text-2xl font-bold mb-4">Projects</h2>
+        {projects.map(project => (
+          <div 
+            key={project.id} 
+            className="cursor-pointer mb-2"
+            onClick={() => openProjectOrTask(project)}
+          >
+            {project.name}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 };
