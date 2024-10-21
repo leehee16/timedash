@@ -8,12 +8,16 @@ export class Task {
   recordedTime?: number;
   priority?: number;
   content: string;
+  x: number;
+  y: number;
 
-  constructor(id: string, title: string, category: TaskCategory, content: string = '') {
+  constructor(id: string, title: string, category: TaskCategory, content: string = '', x: number = 0, y: number = 0) {
     this.id = id;
     this.title = title;
     this.category = category;
     this.content = content;
+    this.x = x;
+    this.y = y;
   }
 
   toMarkdown(): string {

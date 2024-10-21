@@ -25,10 +25,10 @@ interface Tab {
 
 export const Ground: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([
-    new Task('1', 'Task 1', 'Inbox'),
-    new Task('2', 'Task 2', 'Today'),
-    new Task('3', 'Task 3', 'Upcoming'),
-    new Task('4', 'Task 4', 'Menial'),
+    new Task('1', 'Task 1', 'Inbox', '', 0, 0),
+    new Task('2', 'Task 2', 'Today', '', 160, 0),
+    new Task('3', 'Task 3', 'Upcoming', '', 320, 0),
+    new Task('4', 'Task 4', 'Menial', '', 480, 0),
   ]);
 
   const [timelineTasks, setTimelineTasks] = useState<Task[]>([]);
@@ -90,6 +90,18 @@ export const Ground: React.FC = () => {
     }
   };
 
+  const handleTaskDragStart = (taskId: string) => {
+    console.log('Task drag started:', taskId);
+  };
+
+  const handleTaskDragEnd = (taskId: string, x: number, y: number) => {
+    setTasks(prevTasks =>
+      prevTasks.map(task =>
+        task.id === taskId ? { ...task, x, y } : task
+      )
+    );
+  };
+
   const renderTabContent = (tab: Tab) => {
     switch (tab.content.type) {
       case 'ground':
@@ -97,7 +109,8 @@ export const Ground: React.FC = () => {
           <KonvaCanvas 
             tasks={tasks} 
             openProjectOrTask={openProjectOrTask}
-            onTaskDragStart={(taskId) => console.log('Task drag started:', taskId)}
+            onTaskDragStart={handleTaskDragStart}
+            onTaskDragEnd={handleTaskDragEnd}
           />
         );
       case 'markdown':
